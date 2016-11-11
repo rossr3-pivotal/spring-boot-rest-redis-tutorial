@@ -11,6 +11,7 @@ In this tutorial, we will build a new Java REST application that is backed by Re
 *** link:https://spring.io/tools[Spring Tool Suite] or link:https://www.jetbrains.com/idea/[IntelliJ] or link:https://eclipse.org/downloads/[Eclipse] 
 *** link:https://github.com/cloudfoundry/cli/releases[CF CLI]
 *** link:https://maven.apache.org/download.cgi[Apache Maven]
+*** link:http://curl.haxx.se/[Curl]
 
 == Creating the project
 . Go to link:http://start.spring.io[start.spring.io]
@@ -29,7 +30,9 @@ image::spring-initializer-1.png[]
 ... JPA
 .. Scroll down to the *NoSQL section* and select
 ... Redis
-.. Scroll down to the *Cloud Discovery Section* and select
+.. Scroll down to the *Cloud Core section* and select
+... Cloud Connectors
+.. Scroll down to the *Cloud Discovery section* and select
 ... Cloud Foundry Discovery
 
 .. You are now ready generate the project so click the green "Generate Project" button. This will download your new Java project with the required dependencies for you. The downloaded file will be in a compressed (zip) file containing everything you need. 
@@ -44,6 +47,41 @@ image::sts-import-project.png[Importing Maven Project using STS / Eclipse]
 . Build and Run your application. 
 +
 image::running-in-sts.png[]
++
+. Hmmm. The application didn't start. Taking a look at the logs note the error:
++
+```
+2016-11-11 12:34:28.562 ERROR 66804 --- [           main] o.s.boot.SpringApplication               : Application startup failed
+
+org.springframework.beans.factory.BeanCreationException: Error creating bean with name 'org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration': Injection of autowired dependencies failed; nested exception is org.springframework.beans.factory.BeanCreationException: Could not autowire field: private javax.sql.DataSource org.springframework.boot.autoconfigure.orm.jpa.JpaBaseConfiguration.dataSource; nested exception is org.springframework.beans.factory.BeanCreationException: Error creating bean with name 'dataSource' defined in class path resource [org/springframework/boot/autoconfigure/jdbc/DataSourceAutoConfiguration$NonEmbeddedConfiguration.class]: Bean instantiation via factory method failed; nested exception is org.springframework.beans.BeanInstantiationException: Failed to instantiate [javax.sql.DataSource]: Factory method 'dataSource' threw exception; nested exception is org.springframework.boot.autoconfigure.jdbc.DataSourceProperties$DataSourceBeanCreationException: Cannot determine embedded database driver class for database type NONE. If you want an embedded database please put a supported one on the classpath. If you have database settings to be loaded from a particular profile you may need to active it (no profiles are currently active).
+
+(snipped)
+
+Caused by: org.springframework.boot.autoconfigure.jdbc.DataSourceProperties$DataSourceBeanCreationException: Cannot determine embedded database driver class for database type NONE. If you want an embedded database please put a supported one on the classpath. If you have database settings to be loaded from a particular profile you may need to active it (no profiles are currently active).
+
+```
+Near the bottom of the stacktrace gives us a clue as to what might be wrong: Cannot determine embedded database driver class for database type NONE. Spring is attempting to instantiate an in-memory database and is not able to do so. 
+
+To fix this do the following:
+
+. Open up the *SpringPersonApplication* class in the *io.pivotal.demo* package. 
+. Add the following imports
++
+```
+import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
+import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
+import org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration;
+```
++
+. And add the following annotation after the @SpringBootApplication but before the class definition:
++
+```
+@EnableAutoConfiguration(exclude = {DataSourceAutoConfiguration.class, HibernateJpaAutoConfiguration.class})
+```
++
+This annotation tells Spring to disable auto configuration for Hibernate JPA data sources.
+. Save the class
+. Run the application. The application should start without any errors.
 +
 . Open a browser to navigate to http://localhost:8080. Notice that by default, the application is protected with Basic Authentication. If you look in the output log, you'll find the password which will look similar to this:
 +
@@ -83,11 +121,11 @@ security.ignored=/**
 
 Notice that now you are not prompted to log in to view the website. 
 
-So what just happened? We effectively told the Security subsystem not to require security for anything under the top level folder. 
+So what just happened? We effectively told the Security subsystem not to require security for anything under the top level folder. In a more sophisticated application there would be more rules to define where security is and is not required. 
 
 == Adding Domain Object
 
-Let's continue to enhance our application by adding a domain object.
+Let's continue to enhance our application by adding a domain object. This object represents the information we want to store within a repository later on.
 
 . Create a new Java Class called *Person* in the *io.pivotal.demo.domain* package
 . This class will have 3 properties: firstName, lastName, and emailAddress. Use the following code snippet for the class:
@@ -145,7 +183,7 @@ public class Person {
 
 == Creating a Repostiory
 
-Next let's create a repository to store the information. We'll use Redis for this example.
+Next let's create a repository to store the Person information from the Person class we created above. We'll use Redis for this example. Take notice that the constructor of this class requires a RedisTemplate which will be created later on.
 
 . Create a new Java Class called *PersonRepository* in the *io.pivotal.demo.repository* package. This class will implement the CrudRepository interface.
 . Use the snippet below to create the contents of this class:
@@ -255,7 +293,7 @@ public class PersonRepository implements CrudRepository<Person, String> {
 
 == Creating a Repository Populator
 
-Let's create a class that will load data into the repository. This class will hook into the application listener to determine if it should add data to the repository or not. 
+Let's create a class that will load data into the repository. This class will hook into the application listener to determine if it should add data to the repository or not. It is meant to boostrap our application with some pre-defined data if necessary.
 
 . Create a new Java Class called *PersonRepositoryPopulator* in the *io.pivotal.demo.repository* package
 . Use the snippet below to create the contents of this class:
@@ -339,6 +377,8 @@ public class PersonRepositoryPopulator implements ApplicationListener<ContextRef
 ```
 +
 . Save the file
+
+== Sample Data
 
 Let's create some sample data to load into the repository.
 
@@ -450,7 +490,7 @@ public class RedisLocalConfig {
 +
 . Save the file
 
-Note that this class uses a @Profile annotation to take advantage of Spring Profiles. Spring Profiles provide a way to segregate parts of your application configuration and make it only available in certain environments. 
+Note that this class uses a @Profile annotation to take advantage of Spring Profiles. Spring Profiles provide a way to segregate parts of your application configuration and make it only available in certain environments. In this case, we are using the default profile to inform Spring to run this configuration, which connects to a local Redis server. 
 
 == Run the application
 
@@ -470,40 +510,12 @@ PONG
 If it comes back with PONG the Redis server is running 
 
 . Run your application
-. Look at the application logs and see if you have any errors
+. Look at the application logs and verify that you do not have any errors. The snippet below shows the application is running.
 
 ```
-2016-11-08 12:23:32.223 ERROR 42601 --- [           main] o.s.boot.SpringApplication               : Application startup failed
-
-org.springframework.beans.factory.BeanCreationException: Error creating bean with name 'org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration': Injection of autowired dependencies failed; nested exception is org.springframework.beans.factory.BeanCreationException: Could not autowire field: private javax.sql.DataSource org.springframework.boot.autoconfigure.orm.jpa.JpaBaseConfiguration.dataSource; nested exception is org.springframework.beans.factory.BeanCreationException: Error creating bean with name 'dataSource' defined in class path resource [org/springframework/boot/autoconfigure/jdbc/DataSourceAutoConfiguration$NonEmbeddedConfiguration.class]: Bean instantiation via factory method failed; nested exception is org.springframework.beans.BeanInstantiationException: Failed to instantiate [javax.sql.DataSource]: Factory method 'dataSource' threw exception; nested exception is org.springframework.boot.autoconfigure.jdbc.DataSourceProperties$DataSourceBeanCreationException: Cannot determine embedded database driver class for database type NONE. If you want an embedded database please put a supported one on the classpath. If you have database settings to be loaded from a particular profile you may need to active it (no profiles are currently active).
-
-... (snipped)
-
-Caused by: org.springframework.boot.autoconfigure.jdbc.DataSourceProperties$DataSourceBeanCreationException: Cannot determine embedded database driver class for database type NONE. If you want an embedded database please put a supported one on the classpath. If you have database settings to be loaded from a particular profile you may need to active it (no profiles are currently active).
-
+2016-11-11 13:06:51.245  INFO 67202 --- [           main] s.b.c.e.t.TomcatEmbeddedServletContainer : Tomcat started on port(s): 8080 (http)
+2016-11-11 13:06:51.248  INFO 67202 --- [           main] io.pivotal.demo.SpringPersonApplication  : Started SpringPersonApplication in 3.371 seconds (JVM running for 3.848)
 ```
-Near the bottom of the stacktrace gives us a clue as to what might be wrong: Cannot determine embedded database driver class for database type NONE. 
-
-Spring is attempting to instantiate an in-memory database and is not able to do so. To fix this do the following:
-
-. Open up the *SpringPersonApplication* class in the *io.pivotal.demo* package. 
-. Add the following imports
-+
-```
-import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
-import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
-import org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration;
-```
-+
-. And add the following annotation after the @SpringBootApplication but before the class definition:
-+
-```
-@EnableAutoConfiguration(exclude = {DataSourceAutoConfiguration.class, HibernateJpaAutoConfiguration.class})
-```
-+
-This annotation tells Spring to disable auto configuration for Hibernate JPA data sources.
-. Save the class
-. Run the application. The application should start without any errors.
 
 Now let's validate that there is data in the Redis data store. Open a terminal session and type the following command:
 
@@ -623,7 +635,7 @@ $ redis-cli hgetall persons
 
 == Adding Cloud Configuration
 
-Now that we have debugged our application and are satisfied with how it is working, it's time to look at what it will take to deploy it to Pivotal Cloud Foundry. Remember when we created the RedisLocalConfig class? We need to add a configuration profile for a cloud deployment. Let's do that now:
+Now that we have debugged our application and are satisfied with how it is working, it's time to look at what it will take to deploy it to Pivotal Cloud Foundry. Remember when we created the _RedisLocalConfig_ class? We need to add a configuration profile for a cloud deployment. Let's do that now:
 
 . Create a new Java Class called *RedisCloudConfig* in the *io.pivotal.demo.config* package
 . Edit the contents of this file to contain the following:
@@ -680,7 +692,7 @@ $ cd <location of your project>
 $ mvn clean package
 ```
 +
-This creates a self-contained Jar file for the application in the _target_ folder. As an alternative, you can create the jar file within your IDE. For the purposes of this example, it is assumed that the locaiton of the jar file is in the _target_ folder
+This creates a self-contained Jar file for the application in the _target_ folder. As an alternative, you can create the jar file within your IDE. For the purposes of this example, it is assumed that the location of the jar file is in the _target_ folder
 +
 . Push the application using the following command line
 +
@@ -813,6 +825,8 @@ buildpack: java-buildpack=v3.8.1-offline-https://github.com/cloudfoundry/java-bu
 +
 
 image::running-on-pcf.png[]
+
+Now we have an application that runs locally as well as on Pivotal Cloud Foundry. 
 
 == Creating a Manifest
 
