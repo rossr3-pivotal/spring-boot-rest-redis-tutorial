@@ -127,7 +127,7 @@ So what just happened? We effectively told the Security subsystem not to require
 
 Let's continue to enhance our application by adding a domain object. This object represents the information we want to store within a repository later on.
 
-. Create a new Java Class called *Person* in the *io.pivotal.demo.domain* package
+. Create a new Java Class called *Person* in the *io.pivotal.demo.SpringPerson.domain* package
 . This class will have 3 properties: firstName, lastName, and emailAddress. Use the following code snippet for the class:
 +
 ```
@@ -185,7 +185,7 @@ public class Person {
 
 Next let's create a repository to store the Person information from the Person class we created above. We'll use Redis for this example. Take notice that the constructor of this class requires a RedisTemplate which will be created later on.
 
-. Create a new Java Class called *PersonRepository* in the *io.pivotal.demo.repository* package. This class will implement the CrudRepository interface.
+. Create a new Java Class called *PersonRepository* in the *io.pivotal.demo.SpringPerson.repository* package. This class will implement the CrudRepository interface.
 . Use the snippet below to create the contents of this class:
 +
 ```
@@ -193,7 +193,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
-import io.pivotal.demo.domain.Person;
+import io.pivotal.demo.SpringPerson.domain.Person;
 
 import org.springframework.data.redis.core.HashOperations;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -295,11 +295,11 @@ public class PersonRepository implements CrudRepository<Person, String> {
 
 Let's create a class that will load data into the repository. This class will hook into the application listener to determine if it should add data to the repository or not. It is meant to boostrap our application with some pre-defined data if necessary.
 
-. Create a new Java Class called *PersonRepositoryPopulator* in the *io.pivotal.demo.repository* package
+. Create a new Java Class called *PersonRepositoryPopulator* in the *io.pivotal.demo.SpringPerson.repository* package
 . Use the snippet below to create the contents of this class:
 +
 ```
-import io.pivotal.demo.domain.Person;
+import io.pivotal.demo.SpringPerson.domain.Person;
 
 import java.util.Collection;
 
@@ -388,19 +388,19 @@ Let's create some sample data to load into the repository.
 ```
 [
 	{
-		"_class": "io.pivotal.demo.domain.Person",
+		"_class": "io.pivotal.demo.SpringPerson.domain.Person",
 		"emailAddress" : "johndoe@nowhere.com",
 		"firstName" : "John",
 		"lastName" : "Doe"
 	},
 	{
-		"_class": "io.pivotal.demo.domain.Person",
+		"_class": "io.pivotal.demo.SpringPerson.domain.Person",
 		"emailAddress" : "jane@somewhere.com",
 		"firstName" : "Jane",
 		"lastName" : "Smith"
 	},
 	{
-		"_class": "io.pivotal.demo.domain.Person",
+		"_class": "io.pivotal.demo.SpringPerson.domain.Person",
 		"emailAddress" : "bobevans@someplace.com",
 		"firstName" : "Bob",
 		"lastName" : "Evans"
@@ -416,12 +416,12 @@ The PersonRepositoryPopulator class reads the persons.json, attempts to parse it
 
 Let's create a Redis Configuration that will be used to create Redis specific entites such as a RedisTemplate which is used to let Redis know how to serialize objects being stored in it.
 
-. Create a new Java Class called *RedisConfig* in the *io.pivotal.demo.config* package
+. Create a new Java Class called *RedisConfig* in the *io.pivotal.demo.SpringPerson.config* package
 . Edit the contents of this file to contain the following:
 +
 ```
-import io.pivotal.demo.domain.Person;
-import io.pivotal.demo.repository.PersonRepository;
+import io.pivotal.demo.SpringPerson.domain.Person;
+import io.pivotal.demo.SpringPerson.repository.PersonRepository;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -466,7 +466,7 @@ This RedisConfig class is used to create a new Person Repository and to define t
 
 Since our goal is to run this application locally as well as in Pivotal Cloud Foundry, let's create a configuration for redis that we can use locally on our development machines. This class will define a Bean called _RedisConnectionFactory_ that our previous class needs.
 
-. Create a new Java Class called *RedisLocalConfig* in the *io.pivotal.demo.config* package
+. Create a new Java Class called *RedisLocalConfig* in the *io.pivotal.demo.SpringPerson.config* package
 . Edit the contents of this file to contain the following:
 +
 ```
@@ -534,13 +534,13 @@ Notice that Redis returns the data that is found in persons.json, so if you adde
 
 Now that we have a domain object, and some sample data, the next step is to add REST endpoints that provide an API for manipulating the data.
 
-. Create a new Java Class called *PersonController* in the *io.pivotal.demo.controller* package
+. Create a new Java Class called *PersonController* in the *io.pivotal.demo.SpringPerson.controller* package
 . Edit the contents of this file to contain the following:
 +
 ```
 import javax.validation.Valid;
 
-import io.pivotal.demo.domain.Person;
+import io.pivotal.demo.SpringPerson.domain.Person;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.repository.CrudRepository;
@@ -637,7 +637,7 @@ $ redis-cli hgetall persons
 
 Now that we have debugged our application and are satisfied with how it is working, it's time to look at what it will take to deploy it to Pivotal Cloud Foundry. Remember when we created the _RedisLocalConfig_ class? We need to add a configuration profile for a cloud deployment. Let's do that now:
 
-. Create a new Java Class called *RedisCloudConfig* in the *io.pivotal.demo.config* package
+. Create a new Java Class called *RedisCloudConfig* in the *io.pivotal.demo.SpringApplication.config* package
 . Edit the contents of this file to contain the following:
 +
 ```
@@ -689,8 +689,15 @@ $ cf login
 +
 ```
 $ cd <location of your project>
-$ mvn clean package
+$ ./mvnw clean package
 ```
+
+On Windows 
+```
+> cd <location of your project>
+> mvnw.cmd clean package
+```
+*Note:* The maven commands above assume you have a local version of Redis running in order to run through the tests if you want to skip the tests, you can do that by adding on "-Dmaven.test.skip=true" to the mvnw commands above. 
 +
 This creates a self-contained Jar file for the application in the _target_ folder. As an alternative, you can create the jar file within your IDE. For the purposes of this example, it is assumed that the location of the jar file is in the _target_ folder
 +
